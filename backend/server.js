@@ -3,26 +3,19 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
-const corsOptions = {
-  origin: [
-    "https://king-of-diamonds-aib-2.onrender.com",
-    "http://localhost:5173"
-  ],
-  methods: ["GET", "POST"],
-  credentials: true
-};
+const app = express();
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"]
+}));
 
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: {
-    origin: [
-      "https://king-of-diamonds-aib-2.onrender.com",
-      "http://localhost:5173"
-    ],
-    methods: ["GET", "POST"],
-    credentials: true
+    origin: "*",
+    methods: ["GET", "POST"]
   }
 });
 
