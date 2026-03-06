@@ -10,6 +10,8 @@ app.use(cors({
   methods: ["GET", "POST"]
 }));
 
+app.get('/health', (req, res) => res.send('OK'));
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
