@@ -3,16 +3,27 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
-const app = express();
-app.use(cors({
-    origin: process.env.FRONTEND_URL || "*"
-}));
+const corsOptions = {
+  origin: [
+    "https://king-of-diamonds-aib-2.onrender.com",
+    "http://localhost:5173"
+  ],
+  methods: ["GET", "POST"],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: {
-        origin: process.env.FRONTEND_URL || "*",
-        methods: ["GET", "POST"]
-    }
+  cors: {
+    origin: [
+      "https://king-of-diamonds-aib-2.onrender.com",
+      "http://localhost:5173"
+    ],
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
 // Game State
