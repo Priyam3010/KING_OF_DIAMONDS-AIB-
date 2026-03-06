@@ -20,7 +20,8 @@ export const GameProvider = ({ children }) => {
   const [error, setError] = useState('');
 
   const connect = useCallback((code, name) => {
-    const newSocket = io(`http://${window.location.hostname}:8000`);
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || `http://${window.location.hostname}:8000`;
+    const newSocket = io(backendUrl);
     
     newSocket.on('connect', () => {
       newSocket.emit('join', { code, name });
