@@ -1,8 +1,15 @@
+/**
+ * Game Context Provider
+ * manages the global game state, socket connection, and real-time events.
+ */
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
 const GameContext = createContext();
 
+/**
+ * Hook to access the game state and methods.
+ */
 export const useGame = () => useContext(GameContext);
 
 export const GameProvider = ({ children }) => {
@@ -10,7 +17,7 @@ export const GameProvider = ({ children }) => {
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [players, setPlayers] = useState([]);
-  const [gameState, setGameState] = useState('HOME');
+  const [gameState, setGameState] = useState('HOME'); // HOME, LOBBY, PLAYING, RESULTS, GAME_OVER
   const [currentRound, setCurrentRound] = useState(0);
   const [timer, setTimer] = useState(30);
   const [cooldownTimer, setCooldownTimer] = useState(0);
@@ -19,6 +26,11 @@ export const GameProvider = ({ children }) => {
   const [winner, setWinner] = useState(null);
   const [error, setError] = useState('');
 
+  /**
+   * connect: Initializes socket connection to backend and sets up event listeners.
+   * @param {string} code - Room code
+   * @param {string} name - Player name
+   */
   const connect = useCallback((code, name) => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://king-of-diamonds-aib-8ske.onrender.com";
     const newSocket = io(backendUrl);
@@ -30,8 +42,10 @@ export const GameProvider = ({ children }) => {
       setPlayerName(name);
     });
 
+    // Listeners for Backend Events
     newSocket.on('room_update', (data) => {
       setPlayers(data.players);
+      // Automatically move to Lobby upon successful join
       if (gameState === 'HOME') setGameState('LOBBY');
     });
 
@@ -81,10 +95,17 @@ export const GameProvider = ({ children }) => {
     return () => newSocket.close();
   }, [gameState]);
 
+  /**
+   * startGame: Sends signal to backend to start the game match.
+   */
   const startGame = () => {
     if (socket) socket.emit('start_game');
   };
 
+  /**
+   * submitNumber: Sends the player's selection (0-100) to the logic engine.
+   * @param {number} value
+   */
   const submitNumber = (value) => {
     if (socket) socket.emit('submit_number', value);
   };
@@ -98,3 +119,4 @@ export const GameProvider = ({ children }) => {
     </GameContext.Provider>
   );
 };
+

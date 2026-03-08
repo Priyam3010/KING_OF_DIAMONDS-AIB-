@@ -1,3 +1,9 @@
+/**
+ * King of Diamonds (AIB) - Backend Server
+ * Handles real-time game logic using Socket.io and Express.
+ * Version: 1.1.0 (Added documentation comments)
+ */
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -5,6 +11,7 @@ const cors = require("cors");
 
 const app = express();
 
+// Configure CORS for Express routes
 app.use(
   cors({
     origin: "*",
@@ -14,6 +21,7 @@ app.use(
 
 const server = http.createServer(app);
 
+// Initialize Socket.io with CORS configuration
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -21,17 +29,23 @@ const io = new Server(server, {
   },
 });
 
-// Game State
+/**
+ * Global Game State Storage
+ * Key: Room Code (string)
+ * Value: Room Object
+ */
 const rooms = {};
 
 /**
  * Room Object Structure:
  * {
  *   code: string,
- *   isLocked: boolean,
+ *   isLocked: boolean (Game in progress),
  *   currentRound: number,
  *   players: { [socketId: string]: Player },
- *   submissions: { [roundNumber: number]: { [socketId: string]: number } }
+ *   submissions: { [roundNumber: number]: { [socketId: string]: number } },
+ *   timer: IntervalID,
+ *   timerValue: number
  * }
  *
  * Player Object Structure:
@@ -41,16 +55,25 @@ const rooms = {};
  *   score: number,
  *   isHost: boolean,
  *   isEliminated: boolean,
- *   isActive: boolean
+ *   isActive: boolean (Connection status)
  * }
  */
 
+/**
+ * main Socket.io connection handler
+ */
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
+  /**
+   * Event: join
+   * Handles player joining a room or reconnecting.
+   * @param {Object} data - { code, name }
+   */
   socket.on("join", ({ code, name }) => {
     let room = rooms[code];
 
+    // Create room if it doesn't exist
     if (!room) {
       room = {
         code,
@@ -62,6 +85,7 @@ io.on("connection", (socket) => {
       rooms[code] = room;
     }
 
+    // Prevent joining if game has already started
     if (room.isLocked) {
       return socket.emit(
         "error_msg",
@@ -69,6 +93,7 @@ io.on("connection", (socket) => {
       );
     }
 
+    // Limit room capacity to 8 players
     const activePlayersCount = Object.values(room.players).filter(
       (p) => !p.isEliminated,
     ).length;
@@ -79,20 +104,21 @@ io.on("connection", (socket) => {
       );
     }
 
-    // Check if player name exists in room (for reconnection)
+    // Check if player name exists in room (for reconnection logic)
     let player = Object.values(room.players).find((p) => p.name === name);
     if (player) {
-      // Simple reconnect logic: update socket ID
+      // Reconnect: update socket ID and mark active
       delete room.players[player.id];
       player.id = socket.id;
       player.isActive = true;
       room.players[socket.id] = player;
     } else {
+      // New Join: create player object
       player = {
         id: socket.id,
         name,
         score: 0,
-        isHost: Object.keys(room.players).length === 0,
+        isHost: Object.keys(room.players).length === 0, // First player is host
         isEliminated: false,
         isActive: true,
       };
@@ -106,6 +132,10 @@ io.on("connection", (socket) => {
     broadcastRoomUpdate(code);
   });
 
+  /**
+   * Event: start_game
+   * Initiates the game session (Only for Hosts).
+   */
   socket.on("start_game", () => {
     const room = rooms[socket.roomCode];
     if (!room) return;
@@ -116,15 +146,21 @@ io.on("connection", (socket) => {
     const activePlayers = Object.values(room.players).filter(
       (p) => !p.isEliminated,
     );
+    // Game requires minimum 3 players for balance
     if (activePlayers.length < 3) {
       return socket.emit("error_msg", "Minimum 3 players required to start.");
     }
 
-    room.isLocked = true;
+    room.isLocked = true; // Lock room to prevent new joins
     io.to(room.code).emit("game_started");
     startNewRound(room.code);
   });
 
+  /**
+   * Event: submit_number
+   * Registers a player's number choice for the current round.
+   * @param {number} value - The number picked (0-100)
+   */
   socket.on("submit_number", (value) => {
     const room = rooms[socket.roomCode];
     if (!room || room.isEliminated) return;
@@ -137,24 +173,29 @@ io.on("connection", (socket) => {
 
     room.submissions[round][socket.id] = parseFloat(value);
 
-    // Check if all active players submitted
+    // Calculate submission progress
     const activePlayers = Object.values(room.players).filter(
       (p) => !p.isEliminated && p.isActive,
     );
     const submissionCount = Object.keys(room.submissions[round]).length;
 
-    // Broadcast submission count
+    // Inform clients of progress
     io.to(room.code).emit("submission_update", {
       count: submissionCount,
       total: activePlayers.length,
     });
 
+    // Automatically trigger calculation if everyone has submitted
     if (submissionCount >= activePlayers.length) {
       if (room.timer) clearInterval(room.timer);
       calculateResults(room.code);
     }
   });
 
+  /**
+   * Event: disconnect
+   * Handles player disconnection. If game is in progress, the player is eliminated.
+   */
   socket.on("disconnect", () => {
     const room = rooms[socket.roomCode];
     if (!room) return;
@@ -162,7 +203,7 @@ io.on("connection", (socket) => {
     const player = room.players[socket.id];
     if (player) {
       player.isActive = false;
-      // If game is in progress, eliminate immediately as per requirements
+      // Requirement: Instant elimination if disconnected during active game
       if (room.isLocked) {
         player.isEliminated = true;
       }
@@ -171,6 +212,10 @@ io.on("connection", (socket) => {
   });
 });
 
+/**
+ * Sends the current room/player state to all participants in a room.
+ * @param {string} code - Room code
+ */
 function broadcastRoomUpdate(code) {
   const room = rooms[code];
   if (!room) return;
@@ -190,14 +235,17 @@ function broadcastRoomUpdate(code) {
   });
 }
 
+/**
+ * Initializes a new round and starts the countdown timer.
+ * @param {string} code - Room code
+ */
 function startNewRound(code) {
   const room = rooms[code];
   if (!room) return;
 
   room.currentRound++;
-  room.timerValue = 60; // Increased to 60 seconds
+  room.timerValue = 60; // 60 seconds submission window
 
-  // Clear any existing timer
   if (room.timer) clearInterval(room.timer);
 
   io.to(code).emit("round_start", {
@@ -205,17 +253,24 @@ function startNewRound(code) {
     timer: room.timerValue,
   });
 
+  // Start the ticking timer
   room.timer = setInterval(() => {
     room.timerValue--;
     io.to(code).emit("timer_tick", { timer: room.timerValue });
 
     if (room.timerValue <= 0) {
       clearInterval(room.timer);
-      calculateResults(code);
+      calculateResults(code); // Times up! Calculate results
     }
   }, 1000);
 }
 
+/**
+ * Core Game Logic:
+ * Calculates average, target (Average * 0.8), and assigns penalties.
+ * Handles special Alice in Borderland rules (Duplicate, Exact Hits, Duel).
+ * @param {string} code - Room code
+ */
 function calculateResults(code) {
   const room = rooms[code];
   if (!room) return;
@@ -226,16 +281,17 @@ function calculateResults(code) {
   const players = Object.values(room.players).filter((p) => !p.isEliminated);
   const roundSubmissions = room.submissions[round] || {};
 
-  // Auto-pick random for missing submissions
+  // Auto-fill missing submissions with random numbers
   players.forEach((p) => {
     if (roundSubmissions[p.id] === undefined) {
-      roundSubmissions[p.id] = Math.floor(Math.random() * 100) + 1; // 1-100
+      roundSubmissions[p.id] = Math.floor(Math.random() * 100) + 1;
       if (!room.autoSubmitters) room.autoSubmitters = {};
       if (!room.autoSubmitters[round]) room.autoSubmitters[round] = [];
       room.autoSubmitters[round].push(p.id);
     }
   });
 
+  // Rule 1: Calculate Target (Average of all numbers * 0.8)
   const values = Object.values(roundSubmissions);
   const avg = values.reduce((a, b) => a + b, 0) / (values.length || 1);
   const target = avg * 0.8;
@@ -244,6 +300,8 @@ function calculateResults(code) {
     (p) => p.isEliminated,
   ).length;
 
+  // Rule 2: Duplicate Penalty (If 1+ players are already eliminated)
+  // If multiple players pick the same number, they are disqualified from winning.
   let disqualifiedIds = [];
   if (eliminatedCount >= 1) {
     const counts = {};
@@ -256,7 +314,8 @@ function calculateResults(code) {
   let winners = [];
   let closestDiff = 101;
 
-  // Special Duel Rule
+  // Rule 3: Special Duel Rule (When only 2 players remain)
+  // If one picks 0 and the other picks 100, the one who picked 100 wins.
   let specialWinnerId = null;
   if (players.length === 2) {
     const p1 = players[0];
@@ -268,6 +327,7 @@ function calculateResults(code) {
     }
   }
 
+  // Find the winner(s) - closest to target number
   if (specialWinnerId) {
     winners = [specialWinnerId];
   } else {
@@ -283,19 +343,22 @@ function calculateResults(code) {
     });
   }
 
+  // Rule 4: Exact Hit Penalty (If 2+ players are already eliminated)
+  // If someone hits the target exactly, all other players lose 2 points instead of 1.
   const isExactHit = winners.some(
     (id) => roundSubmissions[id] === parseFloat(target),
   );
   const exactHitRuleActive = eliminatedCount >= 2 && isExactHit;
   const normalPenalty = exactHitRuleActive ? -2 : -1;
 
+  // Apply scores and check for elimination (-10 points means death/elimination)
   const roundData = players.map((p) => {
     let change = 0;
     let isDisqualified = disqualifiedIds.includes(p.id);
     let isWinner = winners.includes(p.id);
 
     if (isDisqualified) {
-      change = -2; // Duplicate penalty is always -2
+      change = -2; // Duplicate penalty is always a flat -2
     } else if (!isWinner) {
       change = normalPenalty;
     }
@@ -323,12 +386,14 @@ function calculateResults(code) {
     };
   });
 
+  // Check Game Over Condition
   const activeRemaining = Object.values(room.players).filter(
     (p) => !p.isEliminated,
   );
   const gameOver = activeRemaining.length <= 1;
   const winnerName = gameOver ? activeRemaining[0]?.name || "Nobody" : null;
 
+  // Emit results to all players
   io.to(code).emit("round_results", {
     results: {
       average: avg.toFixed(2),
@@ -345,24 +410,28 @@ function calculateResults(code) {
   });
 
   if (gameOver) {
+    // End game after a short delay
     setTimeout(() => {
       io.to(code).emit("game_over", { winner: winnerName });
     }, 5000);
   } else {
-    // Start Between-Round Timer
-    room.timerValue = 10; // 10 seconds between rounds
+    // Rule: Brief cooldown period between rounds
+    room.timerValue = 10;
     room.timer = setInterval(() => {
       room.timerValue--;
       io.to(code).emit("cooldown_tick", { timer: room.timerValue });
 
       if (room.timerValue <= 0) {
         clearInterval(room.timer);
-        startNewRound(code);
+        startNewRound(code); // Proceed to next round automatically
       }
     }, 1000);
   }
 }
 
+/**
+ * Express Health Check and Server Start
+ */
 const PORT = process.env.PORT || 8000;
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
@@ -371,3 +440,4 @@ app.get("/health", (req, res) => {
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+

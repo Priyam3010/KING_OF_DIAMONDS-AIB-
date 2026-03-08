@@ -1,3 +1,7 @@
+/**
+ * King of Diamonds (AIB) - Main Application Component
+ * Manages the high-level game screens using a state-based routing system.
+ */
 import React, { useState, useEffect } from 'react';
 import { useGame } from './context/GameContext';
 import { Users, Play, Trophy, AlertTriangle, Clock, Skull } from 'lucide-react';
@@ -8,12 +12,14 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Global Error Toast Notification */}
       {error && (
         <div className="error-toast" onClick={() => setError('')}>
           <AlertTriangle size={18} /> {error}
         </div>
       )}
       
+      {/* State-based routing with smooth transitions between screens */}
       <AnimatePresence mode="wait">
         {gameState === 'HOME' && <Home key="home" />}
         {gameState === 'LOBBY' && <Lobby key="lobby" />}
@@ -25,6 +31,10 @@ function App() {
   );
 }
 
+/**
+ * Home Screen
+ * Handles room creation and joining.
+ */
 const Home = () => {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -60,6 +70,10 @@ const Home = () => {
   );
 };
 
+/**
+ * Lobby Screen
+ * Displays waiting players and allows the host to start the game.
+ */
 const Lobby = () => {
   const { roomCode, players, playerName, startGame } = useGame();
   const isHost = players.find(p => p.name === playerName)?.isHost;
@@ -93,6 +107,10 @@ const Lobby = () => {
   );
 };
 
+/**
+ * Game Screen
+ * The main interactive screen where players pick numbers from the grid.
+ */
 const GameScreen = () => {
   const [selectedNum, setSelectedNum] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -102,7 +120,7 @@ const GameScreen = () => {
   const player = players.find(p => p.name === playerName);
   const activeCount = players.filter(p => !p.isEliminated).length;
 
-  // Auto-submit when timer hits 0
+  // Effect: Auto-submit current selection or random number when timer hits 0
   useEffect(() => {
     if (timer === 0 && !submitted && !player?.isEliminated) {
       const finalNum = selectedNum !== null ? selectedNum : Math.floor(Math.random() * 101);
@@ -112,7 +130,7 @@ const GameScreen = () => {
     }
   }, [timer, selectedNum, submitted, submitNumber, player?.isEliminated]);
 
-  // Reset submitted state on new round
+  // Effect: Reset local selection state for each new round
   useEffect(() => {
     if (gameState === 'PLAYING') {
       setSubmitted(false);
@@ -121,6 +139,7 @@ const GameScreen = () => {
     }
   }, [currentRound, gameState]);
 
+  // Handle Spectator/Eliminated Views
   if (player?.isEliminated) {
     if (player.eliminatedInRound === currentRound) {
       return <EliminatedScreen score={player.score} round={player.eliminatedInRound} />;
@@ -157,6 +176,7 @@ const GameScreen = () => {
           YOUR NUMBER: <span className="text-red">{selectedNum !== null ? selectedNum : '--'}</span>
         </div>
         
+        {/* Number Selection Grid (0-100) */}
         <div className={`number-grid ${submitted ? 'disabled' : ''}`}>
           {Array.from({ length: 101 }, (_, i) => i).map(num => (
             <div
@@ -181,6 +201,10 @@ const GameScreen = () => {
   );
 };
 
+/**
+ * Eliminated Screen
+ * Dramatic feedback when a player's score drops to -10.
+ */
 const EliminatedScreen = ({ score, round }) => (
   <motion.div 
     initial={{ opacity: 0 }} 
@@ -194,6 +218,10 @@ const EliminatedScreen = ({ score, round }) => (
   </motion.div>
 );
 
+/**
+ * Spectator Screen
+ * Passive view for players who are already eliminated while game is running.
+ */
 const SpectatorScreen = ({ round, activeCount }) => (
   <motion.div 
     initial={{ opacity: 0 }} 
@@ -217,6 +245,10 @@ const SpectatorScreen = ({ round, activeCount }) => (
   </motion.div>
 );
 
+/**
+ * Results Screen
+ * Detailed breakdown of the round (Average, Target, Scores).
+ */
 const Results = () => {
   const { lastResults, cooldownTimer } = useGame();
   if (!lastResults) return null;
@@ -249,6 +281,7 @@ const Results = () => {
         </div>
       )}
 
+      {/* Scoreboard Table */}
       <table className="scoreboard-table">
         <thead>
           <tr className="text-dim text-xs uppercase text-left">
@@ -310,6 +343,10 @@ const Results = () => {
   );
 };
 
+/**
+ * Game Over Screen
+ * Victory announcement for the final survivor.
+ */
 const GameOver = () => {
   const { winner } = useGame();
   return (
@@ -324,3 +361,4 @@ const GameOver = () => {
 };
 
 export default App;
+
