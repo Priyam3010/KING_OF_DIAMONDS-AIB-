@@ -8,8 +8,24 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const { rateLimit } = require('express-rate-limit');
 
 const app = express();
+
+/**
+ * 1. General API Rate Limiter
+ * 100 requests per 15 minutes per IP
+ */
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: "Too many requests, please wait a moment before trying again.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply to all Express routes
+app.use(apiLimiter);
 
 // Configure CORS for Express routes
 app.use(
@@ -27,6 +43,46 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"],
   },
+});
+
+/**
+ * Custom Rate Limiters for Socket.io
+ * Note: express-rate-limit is for Express middleware. 
+ * We use simple memory-based tracking for sockets.
+ */
+const connectionAttempts = new Map();
+const roomCreations = new Map();
+
+// Cleanup maps periodically to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of connectionAttempts.entries()) {
+    if (now - data.startTime > 60000) connectionAttempts.delete(ip);
+  }
+  for (const [ip, data] of roomCreations.entries()) {
+    if (now - data.startTime > 600000) roomCreations.delete(ip);
+  }
+}, 60000);
+
+// Socket.io Middleware for Connection Rate Limiting
+io.use((socket, next) => {
+  const ip = socket.handshake.address;
+  const now = Date.now();
+  
+  if (!connectionAttempts.has(ip)) {
+    connectionAttempts.set(ip, { count: 1, startTime: now });
+  } else {
+    const data = connectionAttempts.get(ip);
+    if (now - data.startTime < 60000) {
+      data.count++;
+      if (data.count > 10) {
+        return next(new Error("Too many requests, please wait a moment before trying again."));
+      }
+    } else {
+      connectionAttempts.set(ip, { count: 1, startTime: now });
+    }
+  }
+  next();
 });
 
 /**
@@ -72,9 +128,26 @@ io.on("connection", (socket) => {
    */
   socket.on("join", ({ code, name }) => {
     let room = rooms[code];
+    const ip = socket.handshake.address;
 
     // Create room if it doesn't exist
     if (!room) {
+      // Rate limit room creation: Max 5 per 10 minutes per IP
+      const now = Date.now();
+      if (!roomCreations.has(ip)) {
+        roomCreations.set(ip, { count: 1, startTime: now });
+      } else {
+        const data = roomCreations.get(ip);
+        if (now - data.startTime < 600000) {
+          data.count++;
+          if (data.count > 5) {
+            return socket.emit("error_msg", "Too many requests, please wait a moment before trying again.");
+          }
+        } else {
+          roomCreations.set(ip, { count: 1, startTime: now });
+        }
+      }
+
       room = {
         code,
         isLocked: false,
