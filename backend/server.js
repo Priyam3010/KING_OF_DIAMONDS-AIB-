@@ -9,6 +9,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { rateLimit } = require('express-rate-limit');
+const crypto = require('crypto');
 
 const app = express();
 
@@ -127,8 +128,28 @@ io.on("connection", (socket) => {
    * @param {Object} data - { code, name }
    */
   socket.on("join", ({ code, name }) => {
-    let room = rooms[code];
     const ip = socket.handshake.address;
+
+    // 1. Username Validation
+    const nameRegex = /^[a-zA-Z0-9 _-]+$/;
+    if (
+      typeof name !== 'string' ||
+      name.length < 1 ||
+      name.length > 20 ||
+      !nameRegex.test(name)
+    ) {
+      return socket.emit('error', { message: 'Invalid username' });
+    }
+
+    let targetCode = code;
+
+    // 2. Room ID Generation (if it's a creation attempt)
+    // If code is empty, "CREATE", or specific for creation, generate a unique ID
+    if (!targetCode || targetCode === 'CREATE') {
+      targetCode = crypto.randomUUID().slice(0, 8).toUpperCase();
+    }
+
+    let room = rooms[targetCode];
 
     // Create room if it doesn't exist
     if (!room) {
@@ -149,13 +170,13 @@ io.on("connection", (socket) => {
       }
 
       room = {
-        code,
+        code: targetCode,
         isLocked: false,
         currentRound: 0,
         players: {},
         submissions: {},
       };
-      rooms[code] = room;
+      rooms[targetCode] = room;
     }
 
     // Prevent joining if game has already started
@@ -198,11 +219,11 @@ io.on("connection", (socket) => {
       room.players[socket.id] = player;
     }
 
-    socket.join(code);
-    socket.roomCode = code;
+    socket.join(targetCode);
+    socket.roomCode = targetCode;
     socket.playerName = name;
 
-    broadcastRoomUpdate(code);
+    broadcastRoomUpdate(targetCode);
   });
 
   /**
@@ -236,10 +257,21 @@ io.on("connection", (socket) => {
    */
   socket.on("submit_number", (value) => {
     const room = rooms[socket.roomCode];
-    if (!room || room.isEliminated) return;
+    if (!room) return;
 
     const player = room.players[socket.id];
     if (!player || player.isEliminated) return;
+
+    // 3. Number Submission Validation
+    if (
+      value === null ||
+      value === undefined ||
+      !Number.isInteger(value) ||
+      value < 1 ||
+      value > 100
+    ) {
+      return socket.emit('error', { message: 'Invalid number submitted' });
+    }
 
     const round = room.currentRound;
     if (!room.submissions[round]) room.submissions[round] = {};

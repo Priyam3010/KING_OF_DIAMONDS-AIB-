@@ -47,8 +47,7 @@ const Home = () => {
 
   const handleCreate = () => {
     if (!name) return;
-    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    connect(newCode, name);
+    connect('CREATE', name);
   };
 
   return (
@@ -143,7 +142,7 @@ const GameScreen = () => {
   // Effect: Auto-submit current selection or random number when timer hits 0
   useEffect(() => {
     if (timer === 0 && !submitted && !player?.isEliminated) {
-      const finalNum = selectedNum !== null ? selectedNum : Math.floor(Math.random() * 101);
+      const finalNum = selectedNum !== null ? selectedNum : Math.floor(Math.random() * 100) + 1;
       submitNumber(finalNum);
       setSubmitted(true);
       setIsAuto(true);
@@ -198,7 +197,7 @@ const GameScreen = () => {
         
         {/* Number Selection Grid (0-100) */}
         <div className={`number-grid ${submitted ? 'disabled' : ''}`}>
-          {Array.from({ length: 101 }, (_, i) => i).map(num => (
+          {Array.from({ length: 100 }, (_, i) => i + 1).map(num => (
             <div
               key={num}
               className={`grid-cell ${selectedNum === num ? 'selected' : ''} ${submitted ? 'locked' : ''}`}

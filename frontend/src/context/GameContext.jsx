@@ -114,8 +114,12 @@ export const GameProvider = ({ children }) => {
         setGameState('GAME_OVER');
       });
 
-      socketInstance.on('error_msg', (msg) => {
-        setError(msg);
+      socketInstance.on('error_msg', (data) => {
+        setError(typeof data === 'object' ? data.message : data);
+      });
+
+      socketInstance.on('error', (data) => {
+        setError(typeof data === 'object' ? data.message : data);
       });
 
       socketInstance.on('disconnect', () => {
