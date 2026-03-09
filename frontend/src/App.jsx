@@ -4,29 +4,51 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useGame } from './context/GameContext';
-import { Users, Play, Trophy, AlertTriangle, Clock, Skull, Loader2 } from 'lucide-react';
+import { Users, Play, Trophy, AlertTriangle, Clock, Skull, Loader2, Copy, Check, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
-  const { gameState, error, setError } = useGame();
+  const { gameState, error, setError, notification } = useGame();
 
   return (
-    <div className="app-container">
-      {/* Global Error Toast Notification */}
-      {error && (
-        <div className="error-toast" onClick={() => setError('')}>
-          <AlertTriangle size={18} /> {error}
-        </div>
-      )}
-      
-      {/* State-based routing with smooth transitions between screens */}
-      <AnimatePresence mode="wait">
-        {gameState === 'HOME' && <Home key="home" />}
-        {gameState === 'LOBBY' && <Lobby key="lobby" />}
-        {gameState === 'PLAYING' && <GameScreen key="game" />}
-        {gameState === 'RESULTS' && <Results key="results" />}
-        {gameState === 'GAME_OVER' && <GameOver key="over" />}
-      </AnimatePresence>
+    <div className="App">
+      <div className="game-container">
+        <AnimatePresence mode="wait">
+          {notification && (
+            <motion.div 
+              key="notif"
+              initial={{ y: -50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -50, opacity: 0 }}
+              className="notification-banner"
+            >
+              {notification}
+            </motion.div>
+          )}
+
+          {error && (
+            <motion.div 
+              key="error"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="error-banner"
+            >
+              <AlertTriangle size={20} />
+              <span style={{flex: 1}}>{error}</span>
+              <button onClick={() => setError('')} className="error-close">&times;</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
+          {gameState === 'HOME' && <Home key="home" />}
+          {gameState === 'LOBBY' && <Lobby key="lobby" />}
+          {gameState === 'PLAYING' && <GameScreen key="playing" />}
+          {gameState === 'RESULTS' && <Results key="results" />}
+          {gameState === 'GAME_OVER' && <GameOver key="gameover" />}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -36,13 +58,14 @@ function App() {
  * Handles room creation and joining.
  */
 const Home = () => {
+  const { connect, isConnecting } = useGame();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const { connect, isConnecting } = useGame();
 
-  const handleJoin = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (name && code) connect(code.toUpperCase(), name);
+    if (!name || !code) return;
+    connect(code.toUpperCase(), name);
   };
 
   const handleCreate = () => {
@@ -51,12 +74,21 @@ const Home = () => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="card">
-      <h1 className="title">Number Game</h1>
-      <form onSubmit={handleJoin}>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="animate-fade-in-up"
+    >
+      <div className="title-glow">
+        <span className="diamond">♦</span>
+        <h1>Number Game</h1>
+        <span className="diamond">♦</span>
+      </div>
+      
+      <form onSubmit={handleSubmit}>
         <div className="input-group">
-          <label>Player Name</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Arisu" required />
+          <label>In-Game Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Arisu" maxLength={20} required />
         </div>
         <div className="input-group">
           <label>Room Code</label>
@@ -72,14 +104,14 @@ const Home = () => {
         <button 
           type="button" 
           onClick={handleCreate} 
-          className={`btn btn-secondary ${isConnecting ? 'flex-center-gap' : ''}`} 
+          className="btn btn-secondary" 
           disabled={isConnecting}
         >
           {isConnecting ? (
-            <>
+            <div className="flex-center-gap">
               <Loader2 className="animate-spin" size={18} />
-              Connecting to server...
-            </>
+              Connecting...
+            </div>
           ) : (
             'Create Room'
           )}
@@ -95,33 +127,69 @@ const Home = () => {
  */
 const Lobby = () => {
   const { roomCode, players, playerName, startGame } = useGame();
+  const [copied, setCopied] = useState(false);
   const isHost = players.find(p => p.name === playerName)?.isHost;
 
+  const copyCode = () => {
+    navigator.clipboard.writeText(roomCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="card">
-      <h2 className="title">Room: {roomCode}</h2>
-      <div className="input-group">
-        <label>Players ({players.length}/8)</label>
-        <div className="player-list">
-          {players.map(p => (
-            <div key={p.name} className={`player-item ${!p.isActive ? 'eliminated' : ''}`}>
-              <span>{p.name} {p.isHost && '(Host)'}</span>
-              <span className="score">{p.score}</span>
-            </div>
-          ))}
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="animate-fade-in-up"
+    >
+      <div className="text-center">
+        <label className="text-muted" style={{fontSize: '0.7rem'}}>Game Lobby</label>
+        <div className="code-display-wrap">
+          <div className="room-code-box">
+            <h2 className="room-code">{roomCode}</h2>
+          </div>
+          <button className="btn-copy" onClick={copyCode} title="Copy Code">
+            {copied ? <Check size={18} /> : <Copy size={18} />}
+          </button>
         </div>
       </div>
-      {isHost ? (
-        <button 
-          onClick={startGame} 
-          disabled={players.length < 3} 
-          className="btn btn-primary"
-        >
-          {players.length < 3 ? 'Waiting for Players (min 3)' : 'Start Game'}
-        </button>
-      ) : (
-        <div className="text-dim text-center">Waiting for host to start...</div>
-      )}
+
+      <div className="player-list">
+        <label className="text-muted">Citizens ({players.length}/8)</label>
+        {players.map((p, idx) => (
+          <motion.div 
+            key={idx} 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.1 }}
+            className={`player-row ${p.name === playerName ? 'me' : ''}`}
+          >
+            <div className="player-info">
+              <Users size={16} className="text-muted" />
+              <span className="player-name">{p.name} {p.name === playerName && '(You)'}</span>
+              {p.isHost && <span className="host-badge">HOST</span>}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mt-2">
+        {isHost ? (
+          players.length >= 3 ? (
+            <button onClick={startGame} className="btn btn-primary">
+              Start Match
+            </button>
+          ) : (
+            <button className="btn btn-waiting" disabled>
+              Waiting for Players (Min 3)
+            </button>
+          )
+        ) : (
+          <div className="text-center p-2 text-muted animate-pulse" style={{letterSpacing: '0.1em', fontSize: '0.8rem'}}>
+            Waiting for Host to start
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 };
@@ -180,42 +248,66 @@ const GameScreen = () => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="card" style={{ maxWidth: '500px' }}>
-      <div className="flex-between">
-        <span className="text-dim">Round {currentRound}</span>
-        <Clock size={20} className="text-red" />
-      </div>
-      <div className="timer">{timer}</div>
-      <div className="text-center mb-1 text-dim">
-        {submissionProgress.count}/{submissionProgress.total} players submitted
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      className="game-screen animate-fade-in-up"
+    >
+      <div className="game-stats-header">
+        <div className="stat-item">
+          <div className="timer-label">Round</div>
+          <div className="timer-value" style={{fontSize: '1.2rem'}}>{currentRound}</div>
+        </div>
+        <div className="timer-box">
+          <div className="timer-label" style={{color: timer <= 10 ? 'var(--primary-red)' : 'var(--text-muted)'}}>
+            Time Remaining
+          </div>
+          <div className="timer-value">{timer}</div>
+        </div>
+        <div className="stat-item" style={{textAlign: 'right'}}>
+          <div className="timer-label">Submitted</div>
+          <div className="timer-value" style={{fontSize: '1.2rem'}}>{submissionProgress.count}/{submissionProgress.total}</div>
+        </div>
       </div>
 
-      <div className="grid-container">
-        <div className="selected-display">
-          YOUR NUMBER: <span className="text-red">{selectedNum !== null ? selectedNum : '--'}</span>
-        </div>
-        
-        {/* Number Selection Grid (0-100) */}
-        <div className={`number-grid ${submitted ? 'disabled' : ''}`}>
-          {Array.from({ length: 100 }, (_, i) => i + 1).map(num => (
-            <div
-              key={num}
-              className={`grid-cell ${selectedNum === num ? 'selected' : ''} ${submitted ? 'locked' : ''}`}
-              onClick={() => !submitted && setSelectedNum(num)}
-            >
-              {num}
-            </div>
-          ))}
-        </div>
+      <div className="text-center mb-2">
+        <div className="timer-label">Your Selection</div>
+        <h2 className="room-code" style={{color: selectedNum ? 'var(--primary-red)' : 'var(--text-muted)', fontSize: '2.5rem'}}>
+          {selectedNum !== null ? selectedNum : '--'}
+        </h2>
+      </div>
+      
+      <div className="number-grid">
+        {Array.from({ length: 100 }, (_, i) => i + 1).map(num => (
+          <div
+            key={num}
+            className={`grid-cell ${selectedNum === num ? 'selected' : ''} ${submitted ? 'locked' : ''}`}
+            onClick={() => !submitted && setSelectedNum(num)}
+          >
+            {num}
+          </div>
+        ))}
       </div>
 
       <button 
         onClick={handleSubmit} 
-        className={`btn ${submitted ? 'btn-success' : 'btn-primary'}`} 
-        disabled={submitted || selectedNum === null}
+        disabled={submitted || selectedNum === null} 
+        className={`btn ${submitted ? 'btn-secondary' : 'btn-primary'}`}
       >
         {getButtonContent()}
       </button>
+
+      <div className="player-list">
+        <label className="text-muted">Active Players ({activeCount})</label>
+        {players.filter(p => !p.isEliminated).map((p, idx) => (
+          <div key={idx} className="player-row" style={{padding: '8px 15px'}}>
+            <div className="player-info">
+              <span className="player-name">{p.name} {p.name === playerName && '(You)'}</span>
+            </div>
+            <div className="player-score">{p.score}</div>
+          </div>
+        ))}
+      </div>
     </motion.div>
   );
 };
@@ -225,16 +317,16 @@ const GameScreen = () => {
  * Dramatic feedback when a player's score drops to -10.
  */
 const EliminatedScreen = ({ score, round }) => (
-  <motion.div 
-    initial={{ opacity: 0 }} 
-    animate={{ opacity: 1 }} 
-    className="elimination-screen"
-  >
-    <div className="elimination-title">YOU HAVE BEEN<br/>ELIMINATED</div>
-    <div className="text-white text-xl mb-4 font-bold">Final Score: {score}</div>
-    <div className="text-dim uppercase tracking-widest text-sm">Eliminated in Round {round}</div>
-    <p className="mt-8 text-dim max-w-xs">You have failed the game of survival. You are now a spectator.</p>
-  </motion.div>
+  <div className="text-center animate-fade-in-up">
+    <Skull size={64} className="text-primary mb-2" />
+    <h1 className="title-glow">Game Over</h1>
+    <h2 style={{color: 'var(--primary-red)'}}>ELIMINATED</h2>
+    <p className="text-muted mt-2">You survived until Round {round}</p>
+    <div className="mt-2 text-center">
+      <div className="timer-label">Final Score</div>
+      <div className="timer-value" style={{fontSize: '2.5rem'}}>{score}</div>
+    </div>
+  </div>
 );
 
 /**
@@ -269,96 +361,59 @@ const SpectatorScreen = ({ round, activeCount }) => (
  * Detailed breakdown of the round (Average, Target, Scores).
  */
 const Results = () => {
-  const { lastResults, cooldownTimer } = useGame();
+  const { lastResults, cooldownTimer, currentRound } = useGame();
   if (!lastResults) return null;
 
-  const sortedPlayers = [...lastResults.players].sort((a, b) => b.score - a.score);
-  const closestPlayer = lastResults.players.find(p => p.isWinner);
-
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="card" style={{ maxWidth: '600px' }}>
-      <h2 className="title">Round Results</h2>
-      
-      <div className="target-banner text-center">
-        <div className="text-dim text-sm uppercase tracking-widest mb-1">Target Number</div>
-        <div className="timer" style={{ fontSize: '2.5rem', margin: '0' }}>{lastResults.target}</div>
-        <div className="text-dim text-xs mt-1">Average: {lastResults.average}</div>
-        <div className="closest-badge">
-          Closest: {closestPlayer?.name} ({closestPlayer?.value})
+    <div className="results-container animate-fade-in-up">
+      <div className="text-center mb-2">
+        <h2 className="title-glow">Round {currentRound} Results</h2>
+        <div className="target-banner">
+          <label className="text-muted">Target Number</label>
+          <div className="timer-value">{lastResults.target}</div>
+          {lastResults.exactHit && (
+            <div className="host-badge" style={{marginTop: '10px', background: 'gold', color: 'black'}}>
+              EXACT HIT BY {lastResults.exactWinner}!
+            </div>
+          )}
         </div>
-        {lastResults.exactHit && (
-          <div className="mt-4 p-3 bg-red-900/30 border border-red-500 rounded text-red shadow-[0_0_15px_rgba(255,0,0,0.3)] animate-bounce">
-            🎯 EXACT NUMBER HIT by {lastResults.exactWinner}! <br/>
-            <span className="text-xs font-bold">ALL OTHERS -2 POINTS</span>
-          </div>
-        )}
       </div>
 
-      {cooldownTimer > 0 && (
-        <div className="text-center text-red font-bold mb-4 animate-pulse">
-          Next round in {cooldownTimer}s...
-        </div>
-      )}
-
-      {/* Scoreboard Table */}
-      <table className="scoreboard-table">
+      <table className="sleek-table">
         <thead>
-          <tr className="text-dim text-xs uppercase text-left">
-            <th style={{ padding: '0 12px 8px' }}>Player</th>
-            <th style={{ padding: '0 12px 8px' }}>Pick</th>
-            <th style={{ padding: '0 12px 8px' }}>Change</th>
-            <th style={{ padding: '0 12px 8px' }} className="text-right">Total</th>
+          <tr>
+            <th>Player</th>
+            <th>Pick</th>
+            <th>Penalty</th>
+            <th>Score</th>
           </tr>
         </thead>
         <tbody>
-          {sortedPlayers.map((p, index) => (
-            <motion.tr 
-              key={p.name}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className={`scoreboard-row ${p.isWinner ? 'winner-highlight' : ''} ${p.isEliminated ? 'eliminated-row' : ''}`}
-            >
+          {lastResults.players.map((p, idx) => (
+            <tr key={idx} className={`sleek-row ${p.isWinner ? 'winner-row' : ''}`}>
               <td>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold">{p.name}</span>
-                  {p.isWinner && <Trophy size={14} className="text-gold" />}
-                  {p.isEliminated && <Skull size={14} className="text-dim" />}
+                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  {p.isWinner && <Trophy size={14} style={{color: 'gold'}} />}
+                  {p.name}
+                  {p.isAutoSubmitted && <span className="text-muted" style={{fontSize: '0.6rem'}}>(BOT)</span>}
                 </div>
               </td>
-              <td>
-                <div className="flex flex-col">
-                  <span className="text-dim font-mono">{p.value}</span>
-                  {p.isAutoSubmitted && (
-                    <span className="text-[9px] text-red uppercase font-bold flex items-center gap-0.5">
-                      ⏰ Auto-submitted
-                    </span>
-                  )}
-                </div>
+              <td>{p.value}</td>
+              <td style={{color: p.change < 0 ? '#ff4d4d' : '#4dff4d'}}>
+                {p.change > 0 ? `+${p.change}` : p.change}
+                {p.penaltyDescription && <div style={{fontSize: '0.6rem', opacity: 0.7}}>{p.penaltyDescription}</div>}
               </td>
-              <td className={`score-change ${p.change < 0 ? 'text-red' : 'text-gold'}`}>
-                <div className="flex flex-col">
-                  <span>{p.change > 0 ? `+${p.change}` : p.change === 0 ? '--' : p.change}</span>
-                  {p.disqualified && (
-                    <span className="text-[10px] text-red uppercase font-bold flex items-center gap-1">
-                      <AlertTriangle size={10} /> Duplicate
-                    </span>
-                  )}
-                  {p.penaltyDescription && !p.disqualified && (
-                    <span className="text-[10px] text-red uppercase font-bold">
-                      {p.penaltyDescription}
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="text-right font-bold" style={{ color: p.score <= -8 ? 'var(--primary-red)' : 'inherit' }}>
-                {p.score}
-              </td>
-            </motion.tr>
+              <td className="player-score">{p.score}</td>
+            </tr>
           ))}
         </tbody>
       </table>
-    </motion.div>
+
+      <div className="mt-2 text-center">
+        <div className="timer-label">Next Round in</div>
+        <div className="timer-value">{cooldownTimer}</div>
+      </div>
+    </div>
   );
 };
 
@@ -368,16 +423,21 @@ const Results = () => {
  */
 const GameOver = () => {
   const { winner } = useGame();
+
   return (
-    <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="card text-center">
-      <Trophy className="text-gold mx-auto mb-1" size={64} style={{ color: '#ffd700' }} />
-      <h1 className="title">Citizen WINS</h1>
-      <h2 className="winner-name text-gold">{winner}</h2>
-      <p className="text-dim mt-2">Game Over</p>
-      <button onClick={() => window.location.reload()} className="btn btn-secondary mt-2">Back Home</button>
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="text-center animate-fade-in-up"
+    >
+      <Trophy size={64} className="text-primary mb-2" style={{color: 'gold', filter: 'drop-shadow(0 0 10px rgba(255,215,0,0.5))'}} />
+      <h1 className="mb-1 title-glow">Game Over</h1>
+      <p className="mb-2" style={{fontSize: '1.2rem'}}>Winner: <span className="text-primary" style={{color: 'gold', fontWeight: 900}}>{winner}</span></p>
+      <button onClick={() => window.location.reload()} className="btn btn-primary">
+        Return Home
+      </button>
     </motion.div>
   );
 };
 
 export default App;
-
