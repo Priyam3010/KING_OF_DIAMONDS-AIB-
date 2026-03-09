@@ -235,14 +235,18 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     const player = room.players[socket.id];
-    if (!player || !player.isHost) return;
+    
+    // Check if the current socket is actually the host
+    if (!player || !player.isHost) {
+      return socket.emit('error', { message: 'Only host can start game' });
+    }
 
     const activePlayers = Object.values(room.players).filter(
       (p) => !p.isEliminated,
     );
     // Game requires minimum 3 players for balance
     if (activePlayers.length < 3) {
-      return socket.emit("error_msg", "Minimum 3 players required to start.");
+      return socket.emit("error", { message: "Minimum 3 players required to start." });
     }
 
     room.isLocked = true; // Lock room to prevent new joins
@@ -274,6 +278,22 @@ io.on("connection", (socket) => {
     }
 
     const round = room.currentRound;
+
+    // 4. Game State Validation
+    // - Check if game is in progress
+    if (!room.isLocked) {
+      return socket.emit('error', { message: 'Game has not started yet' });
+    }
+    // - Check if round is active (timer running)
+    if (room.timerValue <= 0) {
+      return socket.emit('error', { message: 'Round has already ended' });
+    }
+    // - Check for already submitted
+    if (room.submissions[round] && room.submissions[round][socket.id] !== undefined) {
+      // Ignore if already submitted
+      return; 
+    }
+
     if (!room.submissions[round]) room.submissions[round] = {};
 
     room.submissions[round][socket.id] = parseFloat(value);
