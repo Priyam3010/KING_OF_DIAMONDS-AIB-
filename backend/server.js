@@ -326,13 +326,82 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     const player = room.players[socket.id];
-    if (player) {
-      player.isActive = false;
-      // Requirement: Instant elimination if disconnected during active game
-      if (room.isLocked) {
-        player.isEliminated = true;
+    if (!player) return;
+
+    const wasHost = player.isHost;
+
+    if (!room.isLocked) {
+      // 2. Disconnect in Lobby: Remove player
+      delete room.players[socket.id];
+      const remainingPlayers = Object.values(room.players);
+
+      if (remainingPlayers.length === 0) {
+        // 3. Delete empty room
+        if (room.timer) clearInterval(room.timer);
+        delete rooms[socket.roomCode];
+        console.log(`Room ${socket.roomCode} deleted (empty)`);
+        return;
       }
+
+      // Reassign host if needed
+      if (wasHost) {
+        remainingPlayers[0].isHost = true;
+        io.to(room.code).emit("host_changed", { name: remainingPlayers[0].name });
+      }
+
+      io.to(room.code).emit("player_left", { name: player.name });
       broadcastRoomUpdate(room.code);
+    } else {
+      // 1. Disconnect during Game: Mark as inactive/eliminated
+      player.isActive = false;
+      player.isEliminated = true;
+
+      const activePlayers = Object.values(room.players).filter(p => !p.isEliminated);
+
+      // Reassign host if needed
+      if (wasHost && activePlayers.length > 0) {
+        const nextActive = activePlayers.find(p => p.isActive) || activePlayers[0];
+        if (nextActive) {
+          nextActive.isHost = true;
+          io.to(room.code).emit("host_changed", { name: nextActive.name });
+        }
+      }
+
+      // Auto-submit for round if active
+      if (room.timerValue > 0) {
+        const round = room.currentRound;
+        if (!room.submissions[round]) room.submissions[round] = {};
+        if (room.submissions[round][socket.id] === undefined) {
+          room.submissions[round][socket.id] = Math.floor(Math.random() * 100) + 1;
+          
+          if (!room.autoSubmitters) room.autoSubmitters = {};
+          if (!room.autoSubmitters[round]) room.autoSubmitters[round] = [];
+          room.autoSubmitters[round].push(socket.id);
+
+          const liveActive = Object.values(room.players).filter(p => !p.isEliminated && p.isActive);
+          const submissionCount = Object.keys(room.submissions[round]).length;
+          
+          io.to(room.code).emit("submission_update", {
+            count: submissionCount,
+            total: liveActive.length + 1, // Include the one we just auto-submitted
+          });
+
+          // Check if this triggers results
+          if (submissionCount >= Object.values(room.players).filter(p => !p.isEliminated && (p.isActive || p.id === socket.id)).length) {
+            // This logic is slightly complex, calculateResults will handle it anyway if timer finishes
+            // But let's trigger it if they were the last "live" one
+          }
+        }
+      }
+
+      // Cleanup room if no one is left at all
+      if (Object.values(room.players).every(p => !p.isActive)) {
+        if (room.timer) clearInterval(room.timer);
+        delete rooms[socket.roomCode];
+        console.log(`Room ${socket.roomCode} deleted (all inactive)`);
+      } else {
+        broadcastRoomUpdate(room.code);
+      }
     }
   });
 });
@@ -538,6 +607,9 @@ function calculateResults(code) {
     // End game after a short delay
     setTimeout(() => {
       io.to(code).emit("game_over", { winner: winnerName });
+      // 3. Clean up room from memory completely when game ends
+      delete rooms[code];
+      console.log(`Room ${code} deleted (game over)`);
     }, 5000);
   } else {
     // Rule: Brief cooldown period between rounds

@@ -26,6 +26,7 @@ export const GameProvider = ({ children }) => {
   const [winner, setWinner] = useState(null);
   const [error, setError] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [notification, setNotification] = useState('');
 
   /**
    * connect: Initializes socket connection to backend and sets up event listeners.
@@ -122,6 +123,14 @@ export const GameProvider = ({ children }) => {
         setError(typeof data === 'object' ? data.message : data);
       });
 
+      socketInstance.on('host_changed', (data) => {
+        showNotification(`${data.name} is now the host`);
+      });
+
+      socketInstance.on('player_left', (data) => {
+        showNotification(`${data.name} left the room`);
+      });
+
       socketInstance.on('disconnect', () => {
         setSocket(null);
         setGameState('HOME');
@@ -150,10 +159,15 @@ export const GameProvider = ({ children }) => {
     if (socket) socket.emit('submit_number', value);
   };
 
+  const showNotification = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(''), 3000);
+  };
+
   return (
     <GameContext.Provider value={{
-      socket, roomCode, playerName, players, gameState, currentRound, timer, cooldownTimer, lastResults, submissionProgress, winner, error, isConnecting,
-      connect, startGame, submitNumber, setError
+      socket, roomCode, playerName, players, gameState, currentRound, timer, cooldownTimer, lastResults, submissionProgress, winner, error, isConnecting, notification,
+      connect, startGame, submitNumber, setError, showNotification
     }}>
       {children}
     </GameContext.Provider>
