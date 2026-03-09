@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=Orbitron:wght@400;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=Orbitron:wght@400;900&display=swap");
 
 :root {
   --bg-color: #050505;
@@ -15,7 +15,11 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 body {
@@ -40,24 +44,29 @@ body {
   border: 1px solid var(--border-color);
   padding: 2.5rem;
   border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
   margin-bottom: 2rem;
   position: relative;
   overflow: hidden;
 }
 
 .card::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--primary-red), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary-red),
+    transparent
+  );
 }
 
 .title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: "Orbitron", sans-serif;
   font-size: 2.2rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -80,7 +89,8 @@ body {
   text-transform: uppercase;
 }
 
-input[type="text"], input[type="number"] {
+input[type="text"],
+input[type="number"] {
   width: 100%;
   padding: 12px;
   background: #252525;
@@ -137,7 +147,7 @@ input:focus {
 }
 
 .timer {
-  font-family: 'Orbitron', sans-serif;
+  font-family: "Orbitron", sans-serif;
   font-size: 4rem;
   font-weight: 900;
   color: var(--accent-gold);
@@ -229,12 +239,25 @@ input[type="range"]::-webkit-slider-thumb {
   font-weight: 700;
 }
 
-.mb-1 { margin-bottom: 1rem; }
-.mx-auto { margin-left: auto; margin-right: auto; }
-.mt-2 { margin-top: 2rem; }
-.text-red { color: var(--primary-red); }
-.text-gold { color: var(--accent-gold); }
-.text-center { text-align: center; }
+.mb-1 {
+  margin-bottom: 1rem;
+}
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+.mt-2 {
+  margin-top: 2rem;
+}
+.text-red {
+  color: var(--primary-red);
+}
+.text-gold {
+  color: var(--accent-gold);
+}
+.text-center {
+  text-align: center;
+}
 
 /* Tactical Number Grid */
 .grid-container {
@@ -294,7 +317,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .selected-display {
-  font-family: 'Orbitron', sans-serif;
+  font-family: "Orbitron", sans-serif;
   font-size: 1.2rem;
   letter-spacing: 2px;
   color: var(--text-main);
@@ -358,7 +381,12 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .target-banner {
-  background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 215, 0, 0.1),
+    transparent
+  );
   padding: 15px;
   border-radius: 8px;
   margin-bottom: 1.5rem;
@@ -391,7 +419,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .elimination-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: "Orbitron", sans-serif;
   font-size: 3rem;
   color: var(--primary-red);
   text-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
@@ -420,9 +448,38 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 @keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0.5; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.flex-center-gap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .spectator-stat {

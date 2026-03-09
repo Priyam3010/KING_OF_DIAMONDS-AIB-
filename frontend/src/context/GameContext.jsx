@@ -25,75 +25,111 @@ export const GameProvider = ({ children }) => {
   const [submissionProgress, setSubmissionProgress] = useState({ count: 0, total: 0 });
   const [winner, setWinner] = useState(null);
   const [error, setError] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
 
   /**
    * connect: Initializes socket connection to backend and sets up event listeners.
+   * Now includes retry logic: 5 attempts with 3s intervals.
    * @param {string} code - Room code
    * @param {string} name - Player name
    */
   const connect = useCallback((code, name) => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://king-of-diamonds-aib-8ske.onrender.com";
-    const newSocket = io(backendUrl);
-    
-    newSocket.on('connect', () => {
-      newSocket.emit('join', { code, name });
-      setSocket(newSocket);
-      setRoomCode(code);
-      setPlayerName(name);
-    });
+    setIsConnecting(true);
+    let attempts = 0;
+    const maxAttempts = 5;
+    let socketInstance = null;
 
-    // Listeners for Backend Events
-    newSocket.on('room_update', (data) => {
-      setPlayers(data.players);
-      // Automatically move to Lobby upon successful join
-      if (gameState === 'HOME') setGameState('LOBBY');
-    });
+    const attemptConnection = () => {
+      attempts++;
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://king-of-diamonds-aib-8ske.onrender.com";
+      
+      // Close previous instance if it exists
+      if (socketInstance) {
+        socketInstance.removeAllListeners();
+        socketInstance.close();
+      }
 
-    newSocket.on('game_started', () => {
-      setGameState('PLAYING');
-    });
+      socketInstance = io(backendUrl, {
+        reconnection: false, // We'll handle retries manually for better UI control
+        timeout: 3000
+      });
 
-    newSocket.on('round_start', (data) => {
-      setCurrentRound(data.round);
-      setTimer(data.timer);
-      setCooldownTimer(0);
-      setSubmissionProgress({ count: 0, total: 0 });
-      setGameState('PLAYING');
-    });
+      socketInstance.on('connect', () => {
+        setIsConnecting(false);
+        setError('');
+        socketInstance.emit('join', { code, name });
+        setSocket(socketInstance);
+        setRoomCode(code);
+        setPlayerName(name);
+      });
 
-    newSocket.on('submission_update', (data) => {
-      setSubmissionProgress(data);
-    });
+      socketInstance.on('connect_error', () => {
+        if (attempts < maxAttempts) {
+          setError(`Connection failed. Retrying... (${attempts}/${maxAttempts})`);
+          setTimeout(attemptConnection, 3000);
+        } else {
+          setIsConnecting(false);
+          setError("Failed to connect to server after 5 attempts. Please check your internet or try again later.");
+        }
+      });
 
-    newSocket.on('timer_tick', (data) => {
-      setTimer(data.timer);
-    });
+      // Listeners for Backend Events
+      socketInstance.on('room_update', (data) => {
+        setPlayers(data.players);
+        // Automatically move to Lobby upon successful join
+        setGameState(prev => prev === 'HOME' ? 'LOBBY' : prev);
+      });
 
-    newSocket.on('cooldown_tick', (data) => {
-      setCooldownTimer(data.timer);
-    });
+      socketInstance.on('game_started', () => {
+        setGameState('PLAYING');
+      });
 
-    newSocket.on('round_results', (data) => {
-      setLastResults(data.results);
-      setGameState('RESULTS');
-    });
+      socketInstance.on('round_start', (data) => {
+        setCurrentRound(data.round);
+        setTimer(data.timer);
+        setCooldownTimer(0);
+        setSubmissionProgress({ count: 0, total: 0 });
+        setGameState('PLAYING');
+      });
 
-    newSocket.on('game_over', (data) => {
-      setWinner(data.winner);
-      setGameState('GAME_OVER');
-    });
+      socketInstance.on('submission_update', (data) => {
+        setSubmissionProgress(data);
+      });
 
-    newSocket.on('error_msg', (msg) => {
-      setError(msg);
-    });
+      socketInstance.on('timer_tick', (data) => {
+        setTimer(data.timer);
+      });
 
-    newSocket.on('disconnect', () => {
-      setSocket(null);
-      setGameState('HOME');
-    });
+      socketInstance.on('cooldown_tick', (data) => {
+        setCooldownTimer(data.timer);
+      });
 
-    return () => newSocket.close();
-  }, [gameState]);
+      socketInstance.on('round_results', (data) => {
+        setLastResults(data.results);
+        setGameState('RESULTS');
+      });
+
+      socketInstance.on('game_over', (data) => {
+        setWinner(data.winner);
+        setGameState('GAME_OVER');
+      });
+
+      socketInstance.on('error_msg', (msg) => {
+        setError(msg);
+      });
+
+      socketInstance.on('disconnect', () => {
+        setSocket(null);
+        setGameState('HOME');
+      });
+    };
+
+    attemptConnection();
+
+    return () => {
+      if (socketInstance) socketInstance.close();
+    };
+  }, []);
 
   /**
    * startGame: Sends signal to backend to start the game match.
@@ -112,7 +148,7 @@ export const GameProvider = ({ children }) => {
 
   return (
     <GameContext.Provider value={{
-      socket, roomCode, playerName, players, gameState, currentRound, timer, cooldownTimer, lastResults, submissionProgress, winner, error,
+      socket, roomCode, playerName, players, gameState, currentRound, timer, cooldownTimer, lastResults, submissionProgress, winner, error, isConnecting,
       connect, startGame, submitNumber, setError
     }}>
       {children}

@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useGame } from './context/GameContext';
-import { Users, Play, Trophy, AlertTriangle, Clock, Skull } from 'lucide-react';
+import { Users, Play, Trophy, AlertTriangle, Clock, Skull, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
@@ -38,7 +38,7 @@ function App() {
 const Home = () => {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const { connect } = useGame();
+  const { connect, isConnecting } = useGame();
 
   const handleJoin = (e) => {
     e.preventDefault();
@@ -63,8 +63,28 @@ const Home = () => {
           <label>Room Code</label>
           <input type="text" value={code} onChange={e => setCode(e.target.value)} placeholder="X8B2L1" />
         </div>
-        <button type="submit" className="btn btn-primary">Join Game</button>
-        <button type="button" onClick={handleCreate} className="btn btn-secondary">Create Room</button>
+        <button 
+          type="submit" 
+          className="btn btn-primary" 
+          disabled={isConnecting}
+        >
+          Join Game
+        </button>
+        <button 
+          type="button" 
+          onClick={handleCreate} 
+          className={`btn btn-secondary ${isConnecting ? 'flex-center-gap' : ''}`} 
+          disabled={isConnecting}
+        >
+          {isConnecting ? (
+            <>
+              <Loader2 className="animate-spin" size={18} />
+              Connecting to server...
+            </>
+          ) : (
+            'Create Room'
+          )}
+        </button>
       </form>
     </motion.div>
   );
