@@ -142,6 +142,21 @@ const rooms = {};
  */
 
 /**
+ * Helper: Sanitizes user-provided strings to prevent XSS.
+ * @param {string} str
+ * @returns {string}
+ */
+function sanitize(str) {
+  if (typeof str !== 'string' && !(str instanceof String)) return str;
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+/**
  * main Socket.io connection handler
  */
 io.on("connection", (socket) => {
@@ -155,18 +170,22 @@ io.on("connection", (socket) => {
   socket.on("join", ({ code, name }) => {
     const ip = socket.handshake.address;
 
+    // Sanitize inputs
+    const sanitizedName = sanitize(name);
+    const sanitizedCode = sanitize(code);
+
     // 1. Username Validation
     const nameRegex = /^[a-zA-Z0-9 _-]+$/;
     if (
-      typeof name !== 'string' ||
-      name.length < 1 ||
-      name.length > 20 ||
-      !nameRegex.test(name)
+      typeof sanitizedName !== 'string' ||
+      sanitizedName.length < 1 ||
+      sanitizedName.length > 20 ||
+      !nameRegex.test(sanitizedName)
     ) {
       return socket.emit('error', { message: 'Invalid username' });
     }
 
-    let targetCode = code;
+    let targetCode = sanitizedCode;
 
     // 2. Room ID Generation (if it's a creation attempt)
     // If code is empty, "CREATE", or specific for creation, generate a unique ID
@@ -225,7 +244,7 @@ io.on("connection", (socket) => {
     }
 
     // Check if player name exists in room (for reconnection logic)
-    let player = Object.values(room.players).find((p) => p.name === name);
+    let player = Object.values(room.players).find((p) => p.name === sanitizedName);
     if (player) {
       // Reconnect: update socket ID and mark active
       delete room.players[player.id];
@@ -236,7 +255,7 @@ io.on("connection", (socket) => {
       // New Join: create player object
       player = {
         id: socket.id,
-        name,
+        name: sanitizedName,
         score: 0,
         isHost: Object.keys(room.players).length === 0, // First player is host
         isEliminated: false,
@@ -247,7 +266,7 @@ io.on("connection", (socket) => {
 
     socket.join(targetCode);
     socket.roomCode = targetCode;
-    socket.playerName = name;
+    socket.playerName = sanitizedName;
     room.lastActivity = Date.now();
 
     broadcastRoomUpdate(targetCode);
