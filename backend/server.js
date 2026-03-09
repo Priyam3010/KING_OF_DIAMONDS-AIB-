@@ -65,6 +65,31 @@ setInterval(() => {
   }
 }, 60000);
 
+/**
+ * 4. Memory & Room Monitoring (Every 10 minutes)
+ */
+setInterval(() => {
+  console.log('--- Server Status ---');
+  console.log('Active rooms:', Object.keys(rooms).length);
+  console.log('Memory usage:', (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2), 'MB');
+  console.log('---------------------');
+}, 10 * 60 * 1000);
+
+/**
+ * 5. Stale Room Cleanup (Every 30 minutes)
+ * Deletes rooms that have been inactive for more than 1 hour.
+ */
+setInterval(() => {
+  const now = Date.now();
+  for (const roomId in rooms) {
+    if (now - rooms[roomId].lastActivity > 60 * 60 * 1000) {
+      if (rooms[roomId].timer) clearInterval(rooms[roomId].timer);
+      delete rooms[roomId];
+      console.log(`Room ${roomId} deleted (stale - 1hr+ inactive)`);
+    }
+  }
+}, 30 * 60 * 1000);
+
 // Socket.io Middleware for Connection Rate Limiting
 io.use((socket, next) => {
   const ip = socket.handshake.address;
@@ -175,6 +200,7 @@ io.on("connection", (socket) => {
         currentRound: 0,
         players: {},
         submissions: {},
+        lastActivity: Date.now(),
       };
       rooms[targetCode] = room;
     }
@@ -222,6 +248,7 @@ io.on("connection", (socket) => {
     socket.join(targetCode);
     socket.roomCode = targetCode;
     socket.playerName = name;
+    room.lastActivity = Date.now();
 
     broadcastRoomUpdate(targetCode);
   });
@@ -250,6 +277,7 @@ io.on("connection", (socket) => {
     }
 
     room.isLocked = true; // Lock room to prevent new joins
+    room.lastActivity = Date.now();
     io.to(room.code).emit("game_started");
     startNewRound(room.code);
   });
@@ -297,6 +325,7 @@ io.on("connection", (socket) => {
     if (!room.submissions[round]) room.submissions[round] = {};
 
     room.submissions[round][socket.id] = parseFloat(value);
+    room.lastActivity = Date.now();
 
     // Calculate submission progress
     const activePlayers = Object.values(room.players).filter(
@@ -604,13 +633,13 @@ function calculateResults(code) {
   });
 
   if (gameOver) {
-    // End game after a short delay
+    // End game after a 5-minute delay (allow scoreboard view)
     setTimeout(() => {
       io.to(code).emit("game_over", { winner: winnerName });
       // 3. Clean up room from memory completely when game ends
       delete rooms[code];
-      console.log(`Room ${code} deleted (game over)`);
-    }, 5000);
+      console.log(`Room ${code} deleted (game over - 5min timeout)`);
+    }, 5 * 60 * 1000);
   } else {
     // Rule: Brief cooldown period between rounds
     room.timerValue = 10;
