@@ -2,7 +2,7 @@
  * Game Context Provider
  * manages the global game state, socket connection, and real-time events.
  */
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 const GameContext = createContext();
@@ -13,6 +13,7 @@ const GameContext = createContext();
 export const useGame = () => useContext(GameContext);
 
 export const GameProvider = ({ children }) => {
+  const socketRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
@@ -45,15 +46,19 @@ export const GameProvider = ({ children }) => {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://king-of-diamonds-aib-8ske.onrender.com";
       
       // Close previous instance if it exists
-      if (socketInstance) {
-        socketInstance.removeAllListeners();
-        socketInstance.close();
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
+        socketRef.current.close();
       }
 
-      socketInstance = io(backendUrl, {
+      const token = localStorage.getItem('gameToken') || '';
+      socketRef.current = io(backendUrl, {
+        auth: { token },
         reconnection: false, // We'll handle retries manually for better UI control
         timeout: 3000
       });
+
+      const socketInstance = socketRef.current;
 
       socketInstance.on('connect', () => {
         setIsConnecting(false);
@@ -76,8 +81,10 @@ export const GameProvider = ({ children }) => {
 
       socketInstance.on('joined', (data) => {
         setRoomCode(data.roomId);
-        // Store token for authenticated events
-        socketInstance.handshake.auth = { token: data.token };
+        // Persist token for future handshakes
+        if (data.token) {
+          localStorage.setItem('gameToken', data.token);
+        }
       });
 
       // Listeners for Backend Events
@@ -154,7 +161,7 @@ export const GameProvider = ({ children }) => {
    * startGame: Sends signal to backend to start the game match.
    */
   const startGame = () => {
-    if (socket) socket.emit('start_game');
+    if (socket) socket.emit('start_game', { roomId: roomCode });
   };
 
   /**
