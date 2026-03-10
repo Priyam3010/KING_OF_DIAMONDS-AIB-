@@ -6,12 +6,14 @@ import React, { useState, useEffect } from 'react';
 import { useGame } from './context/GameContext';
 import { Users, Play, Trophy, AlertTriangle, Clock, Skull, Loader2, Copy, Check, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import BgAnimation from './components/BgAnimation';
 
 function App() {
   const { gameState, error, setError, notification } = useGame();
 
   return (
     <div className="App">
+      <BgAnimation />
       <div className="game-container">
         <AnimatePresence mode="wait">
           {notification && (
@@ -77,13 +79,9 @@ const Home = () => {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="animate-fade-in-up"
     >
-      <div className="title-glow">
-        <span className="diamond">♦</span>
-        <h1>Number Game</h1>
-        <span className="diamond">♦</span>
-      </div>
+      <h1>KING OF DIAMONDS</h1>
+      <span className="subtitle">♦ Alice in Borderland ♦</span>
       
       <form onSubmit={handleSubmit}>
         <div className="input-group">
@@ -94,29 +92,40 @@ const Home = () => {
           <label>Room Code</label>
           <input type="text" value={code} onChange={e => setCode(e.target.value)} placeholder="X8B2L1" />
         </div>
+        
         <button 
           type="submit" 
           className="btn btn-primary" 
           disabled={isConnecting}
         >
-          Join Game
+          {isConnecting && !code.includes('CREATE') ? (
+            <div className="flex-center-gap">
+              <Loader2 className="animate-spin" size={18} />
+              Joining...
+            </div>
+          ) : (
+            'Join Game'
+          )}
         </button>
+        
         <button 
           type="button" 
           onClick={handleCreate} 
           className="btn btn-secondary" 
           disabled={isConnecting}
         >
-          {isConnecting ? (
+          {isConnecting && code === 'CREATE' ? (
             <div className="flex-center-gap">
               <Loader2 className="animate-spin" size={18} />
-              Connecting...
+              Creating...
             </div>
           ) : (
             'Create Room'
           )}
         </button>
       </form>
+      
+      <div className="footer-diamonds">♦ ♦ ♦</div>
     </motion.div>
   );
 };
