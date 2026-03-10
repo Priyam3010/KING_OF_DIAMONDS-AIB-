@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useGame } from './context/GameContext';
 import { Users, Play, Trophy, AlertTriangle, Clock, Skull, Loader2, Copy, Check, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import BgAnimation from './components/BgAnimation';
 import LobbyAnimation from './components/LobbyAnimation';
 
 function App() {
