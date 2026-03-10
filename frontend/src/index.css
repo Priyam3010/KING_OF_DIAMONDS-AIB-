@@ -445,3 +445,49 @@ input[type="text"]:focus {
     padding: 30px 20px;
   }
 }
+
+/* 10x10 Number Grid Layout */
+.number-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 24px;
+}
+
+.grid-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  border-radius: 4px;
+  color: #e8d5a3;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.grid-cell:hover {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: rgba(201, 168, 76, 0.6);
+  color: #f0d080;
+}
+
+.grid-cell.selected {
+  background: rgba(201, 168, 76, 0.3);
+  border-color: #c9a84c;
+  color: #f0d080;
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.4);
+}
+
+.grid-cell.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
