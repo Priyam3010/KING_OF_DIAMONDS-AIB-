@@ -6,15 +6,16 @@ import React, { useState, useEffect } from 'react';
 import { useGame } from './context/GameContext';
 import { Users, Play, Trophy, AlertTriangle, Clock, Skull, Loader2, Copy, Check, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import BgAnimation from './components/BgAnimation';
+import LobbyAnimation from './components/LobbyAnimation';
 
 function App() {
   const { gameState, error, setError, notification } = useGame();
 
   return (
     <div className="App">
-      <BgAnimation />
-      <div className="game-container">
+      {gameState === 'HOME' && <BgAnimation />}
+      {gameState === 'LOBBY' && <LobbyAnimation />}
+      <div className={`game-container ${gameState === 'LOBBY' ? 'lobby-container' : ''}`}>
         <AnimatePresence mode="wait">
           {notification && (
             <motion.div 
@@ -149,56 +150,63 @@ const Lobby = () => {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="animate-fade-in-up"
     >
-      <div className="text-center">
-        <label className="text-muted" style={{fontSize: '0.7rem'}}>Game Lobby</label>
-        <div className="code-display-wrap">
-          <div className="room-code-box">
-            <h2 className="room-code">{roomCode}</h2>
-          </div>
-          <button className="btn-copy" onClick={copyCode} title="Copy Code">
+      <div className="room-code-section">
+        <label className="room-code-label">Game Lobby</label>
+        <div className="room-code-display">
+          <div className="room-code-box">{roomCode}</div>
+          <button className="copy-button" onClick={copyCode} title="Copy Code">
             {copied ? <Check size={18} /> : <Copy size={18} />}
           </button>
         </div>
       </div>
 
-      <div className="player-list">
-        <label className="text-muted">Citizens ({players.length}/8)</label>
+      <div className="section-divider">
+        <div className="divider-line"></div>
+        <span className="divider-text">CITIZENS ({players.length}/8)</span>
+        <div className="divider-line"></div>
+      </div>
+
+      <div className="player-list-lobby">
         {players.map((p, idx) => (
           <motion.div 
             key={idx} 
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className={`player-row ${p.name === playerName ? 'me' : ''}`}
+            transition={{ delay: idx * 0.08 }}
+            className="player-row-lobby"
           >
-            <div className="player-info">
-              <Users size={16} className="text-muted" />
-              <span className="player-name">{p.name} {p.name === playerName && '(You)'}</span>
-              {p.isHost && <span className="host-badge">HOST</span>}
+            <div className="player-info-lobby">
+              <span className="player-icon">♟</span>
+              <span className="player-name-lobby">
+                {p.name} {p.name === playerName && <span className="you-tag">(You)</span>}
+              </span>
+              {p.isHost && <span className="host-badge-lobby">HOST</span>}
             </div>
+            <div className="player-score-lobby">{p.score}</div>
           </motion.div>
         ))}
       </div>
 
-      <div className="mt-2">
+      <div className="lobby-footer">
         {isHost ? (
           players.length >= 3 ? (
             <button onClick={startGame} className="btn btn-primary">
-              Start Match
+              ♦ &nbsp; START GAME &nbsp; ♦
             </button>
           ) : (
-            <button className="btn btn-waiting" disabled>
-              Waiting for Players (Min 3)
+            <button className="btn btn-waiting-lobby" disabled>
+              WAITING FOR PLAYERS <span className="dots"></span>
             </button>
           )
         ) : (
-          <div className="text-center p-2 text-muted animate-pulse" style={{letterSpacing: '0.1em', fontSize: '0.8rem'}}>
-            Waiting for Host to start
+          <div className="text-center p-2 text-muted animate-pulse" style={{letterSpacing: '0.15em', fontSize: '0.8rem', color: 'rgba(201,168,76,0.45)'}}>
+            WAITING FOR HOST TO START <span className="dots"></span>
           </div>
         )}
       </div>
+
+      <div className="footer-diamonds">♦ ♦ ♦</div>
     </motion.div>
   );
 };
