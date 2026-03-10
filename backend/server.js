@@ -1,69 +1,125 @@
 /**
  * King of Diamonds (AIB) - Backend Server
  * Handles real-time game logic using Socket.io and Express.
- * Version: 1.1.0 (Added documentation comments)
+ * Version: 1.2.0 (Security Hardening)
  */
 
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const { rateLimit } = require('express-rate-limit');
+const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
+// Startup check for required environment variables
+const requiredEnvVars = ['JWT_SECRET', 'ALLOWED_ORIGINS'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    throw new Error(`Missing required environment variable: ${envVar}`);
+  }
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 const app = express();
 
-/**
- * 1. General API Rate Limiter
- * 100 requests per 15 minutes per IP
- */
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests, please wait a moment before trying again.",
+// --- VULNERABILITY 3: STRICT CORS ---
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+// Always allow localhost in development
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.push('http://localhost:5173');
+}
+
+const corsOptions = {
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('Blocked by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
+// --- VULNERABILITY 1: RATE LIMITING ---
+const generalLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000,
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 100,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
 });
-
-// Apply to all Express routes
-app.use(apiLimiter);
-
-// Configure CORS for Express routes
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST"],
-  }),
-);
+app.use(generalLimiter);
 
 const server = http.createServer(app);
 
 // Initialize Socket.io with CORS configuration
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
+  cors: corsOptions
 });
 
-/**
- * Custom Rate Limiters for Socket.io
- * Note: express-rate-limit is for Express middleware. 
- * We use simple memory-based tracking for sockets.
- */
+// Socket.io connection rate limiting
 const connectionAttempts = new Map();
-const roomCreations = new Map();
+io.use((socket, next) => {
+  const ip = socket.handshake.address;
+  const now = Date.now();
+  const windowMs = 60000;
+  const maxAttempts = 10;
+  
+  if (!connectionAttempts.has(ip)) {
+    connectionAttempts.set(ip, []);
+  }
+  
+  const attempts = connectionAttempts.get(ip)
+    .filter(time => now - time < windowMs);
+  
+  if (attempts.length >= maxAttempts) {
+    return next(new Error('Too many connection attempts'));
+  }
+  
+  attempts.push(now);
+  connectionAttempts.set(ip, attempts);
+  next();
+});
 
-// Cleanup maps periodically to prevent memory leaks
+// Clean up old entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, data] of connectionAttempts.entries()) {
-    if (now - data.startTime > 60000) connectionAttempts.delete(ip);
+  for (const [ip, attempts] of connectionAttempts.entries()) {
+    const recent = attempts.filter(t => now - t < 60000);
+    if (recent.length === 0) connectionAttempts.delete(ip);
+    else connectionAttempts.set(ip, recent);
   }
-  for (const [ip, data] of roomCreations.entries()) {
-    if (now - data.startTime > 600000) roomCreations.delete(ip);
+}, 5 * 60 * 1000);
+
+// --- VULNERABILITY 2: SOCKET.IO AUTH WITH JWT ---
+// Issue token when player joins
+function issueToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '2h' });
+}
+
+// Middleware to verify token on protected socket events
+function verifySocketToken(socket, eventData, next) {
+  const token = socket.handshake.auth.token;
+  if (!token) return socket.emit('auth_error', 
+    { message: 'Authentication required' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    socket.emit('auth_error', { message: 'Invalid or expired token' });
   }
-}, 60000);
+}
 
 /**
  * 4. Memory & Room Monitoring (Every 10 minutes)
@@ -90,56 +146,12 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
-// Socket.io Middleware for Connection Rate Limiting
-io.use((socket, next) => {
-  const ip = socket.handshake.address;
-  const now = Date.now();
-  
-  if (!connectionAttempts.has(ip)) {
-    connectionAttempts.set(ip, { count: 1, startTime: now });
-  } else {
-    const data = connectionAttempts.get(ip);
-    if (now - data.startTime < 60000) {
-      data.count++;
-      if (data.count > 10) {
-        return next(new Error("Too many requests, please wait a moment before trying again."));
-      }
-    } else {
-      connectionAttempts.set(ip, { count: 1, startTime: now });
-    }
-  }
-  next();
-});
-
 /**
  * Global Game State Storage
  * Key: Room Code (string)
  * Value: Room Object
  */
 const rooms = {};
-
-/**
- * Room Object Structure:
- * {
- *   code: string,
- *   isLocked: boolean (Game in progress),
- *   currentRound: number,
- *   players: { [socketId: string]: Player },
- *   submissions: { [roundNumber: number]: { [socketId: string]: number } },
- *   timer: IntervalID,
- *   timerValue: number
- * }
- *
- * Player Object Structure:
- * {
- *   id: string (socketId),
- *   name: string,
- *   score: number,
- *   isHost: boolean,
- *   isEliminated: boolean,
- *   isActive: boolean (Connection status)
- * }
- */
 
 /**
  * Helper: Sanitizes user-provided strings to prevent XSS.
@@ -168,8 +180,6 @@ io.on("connection", (socket) => {
    * @param {Object} data - { code, name }
    */
   socket.on("join", ({ code, name }) => {
-    const ip = socket.handshake.address;
-
     // Sanitize inputs
     const sanitizedName = sanitize(name);
     const sanitizedCode = sanitize(code);
@@ -197,22 +207,6 @@ io.on("connection", (socket) => {
 
     // Create room if it doesn't exist
     if (!room) {
-      // Rate limit room creation: Max 5 per 10 minutes per IP
-      const now = Date.now();
-      if (!roomCreations.has(ip)) {
-        roomCreations.set(ip, { count: 1, startTime: now });
-      } else {
-        const data = roomCreations.get(ip);
-        if (now - data.startTime < 600000) {
-          data.count++;
-          if (data.count > 5) {
-            return socket.emit("error_msg", "Too many requests, please wait a moment before trying again.");
-          }
-        } else {
-          roomCreations.set(ip, { count: 1, startTime: now });
-        }
-      }
-
       room = {
         code: targetCode,
         isLocked: false,
@@ -269,6 +263,10 @@ io.on("connection", (socket) => {
     socket.playerName = sanitizedName;
     room.lastActivity = Date.now();
 
+    // Issue JWT token on join
+    const token = issueToken({ socketId: socket.id, username: sanitizedName });
+    socket.emit('joined', { token, roomId: targetCode, isHost: player.isHost });
+
     broadcastRoomUpdate(targetCode);
   });
 
@@ -276,29 +274,31 @@ io.on("connection", (socket) => {
    * Event: start_game
    * Initiates the game session (Only for Hosts).
    */
-  socket.on("start_game", () => {
-    const room = rooms[socket.roomCode];
-    if (!room) return;
+  socket.on("start_game", (data) => {
+    verifySocketToken(socket, data, () => {
+      const room = rooms[socket.roomCode];
+      if (!room) return;
 
-    const player = room.players[socket.id];
-    
-    // Check if the current socket is actually the host
-    if (!player || !player.isHost) {
-      return socket.emit('error', { message: 'Only host can start game' });
-    }
+      const player = room.players[socket.id];
+      
+      // Check if the current socket is actually the host
+      if (!player || !player.isHost) {
+        return socket.emit('error', { message: 'Only host can start game' });
+      }
 
-    const activePlayers = Object.values(room.players).filter(
-      (p) => !p.isEliminated,
-    );
-    // Game requires minimum 3 players for balance
-    if (activePlayers.length < 3) {
-      return socket.emit("error", { message: "Minimum 3 players required to start." });
-    }
+      const activePlayers = Object.values(room.players).filter(
+        (p) => !p.isEliminated,
+      );
+      // Game requires minimum 3 players for balance
+      if (activePlayers.length < 3) {
+        return socket.emit("error", { message: "Minimum 3 players required to start." });
+      }
 
-    room.isLocked = true; // Lock room to prevent new joins
-    room.lastActivity = Date.now();
-    io.to(room.code).emit("game_started");
-    startNewRound(room.code);
+      room.isLocked = true; // Lock room to prevent new joins
+      room.lastActivity = Date.now();
+      io.to(room.code).emit("game_started");
+      startNewRound(room.code);
+    });
   });
 
   /**
@@ -307,62 +307,64 @@ io.on("connection", (socket) => {
    * @param {number} value - The number picked (0-100)
    */
   socket.on("submit_number", (value) => {
-    const room = rooms[socket.roomCode];
-    if (!room) return;
+    verifySocketToken(socket, value, () => {
+      const room = rooms[socket.roomCode];
+      if (!room) return;
 
-    const player = room.players[socket.id];
-    if (!player || player.isEliminated) return;
+      const player = room.players[socket.id];
+      if (!player || player.isEliminated) return;
 
-    // 3. Number Submission Validation
-    if (
-      value === null ||
-      value === undefined ||
-      !Number.isInteger(value) ||
-      value < 1 ||
-      value > 100
-    ) {
-      return socket.emit('error', { message: 'Invalid number submitted' });
-    }
+      // 3. Number Submission Validation
+      if (
+        value === null ||
+        value === undefined ||
+        !Number.isInteger(value) ||
+        value < 1 ||
+        value > 100
+      ) {
+        return socket.emit('error', { message: 'Invalid number submitted' });
+      }
 
-    const round = room.currentRound;
+      const round = room.currentRound;
 
-    // 4. Game State Validation
-    // - Check if game is in progress
-    if (!room.isLocked) {
-      return socket.emit('error', { message: 'Game has not started yet' });
-    }
-    // - Check if round is active (timer running)
-    if (room.timerValue <= 0) {
-      return socket.emit('error', { message: 'Round has already ended' });
-    }
-    // - Check for already submitted
-    if (room.submissions[round] && room.submissions[round][socket.id] !== undefined) {
-      // Ignore if already submitted
-      return; 
-    }
+      // 4. Game State Validation
+      // - Check if game is in progress
+      if (!room.isLocked) {
+        return socket.emit('error', { message: 'Game has not started yet' });
+      }
+      // - Check if round is active (timer running)
+      if (room.timerValue <= 0) {
+        return socket.emit('error', { message: 'Round has already ended' });
+      }
+      // - Check for already submitted
+      if (room.submissions[round] && room.submissions[round][socket.id] !== undefined) {
+        // Ignore if already submitted
+        return; 
+      }
 
-    if (!room.submissions[round]) room.submissions[round] = {};
+      if (!room.submissions[round]) room.submissions[round] = {};
 
-    room.submissions[round][socket.id] = parseFloat(value);
-    room.lastActivity = Date.now();
+      room.submissions[round][socket.id] = parseFloat(value);
+      room.lastActivity = Date.now();
 
-    // Calculate submission progress
-    const activePlayers = Object.values(room.players).filter(
-      (p) => !p.isEliminated && p.isActive,
-    );
-    const submissionCount = Object.keys(room.submissions[round]).length;
+      // Calculate submission progress
+      const activePlayers = Object.values(room.players).filter(
+        (p) => !p.isEliminated && p.isActive,
+      );
+      const submissionCount = Object.keys(room.submissions[round]).length;
 
-    // Inform clients of progress
-    io.to(room.code).emit("submission_update", {
-      count: submissionCount,
-      total: activePlayers.length,
+      // Inform clients of progress
+      io.to(room.code).emit("submission_update", {
+        count: submissionCount,
+        total: activePlayers.length,
+      });
+
+      // Automatically trigger calculation if everyone has submitted
+      if (submissionCount >= activePlayers.length) {
+        if (room.timer) clearInterval(room.timer);
+        calculateResults(room.code);
+      }
     });
-
-    // Automatically trigger calculation if everyone has submitted
-    if (submissionCount >= activePlayers.length) {
-      if (room.timer) clearInterval(room.timer);
-      calculateResults(room.code);
-    }
   });
 
   /**
@@ -433,12 +435,6 @@ io.on("connection", (socket) => {
             count: submissionCount,
             total: liveActive.length + 1, // Include the one we just auto-submitted
           });
-
-          // Check if this triggers results
-          if (submissionCount >= Object.values(room.players).filter(p => !p.isEliminated && (p.isActive || p.id === socket.id)).length) {
-            // This logic is slightly complex, calculateResults will handle it anyway if timer finishes
-            // But let's trigger it if they were the last "live" one
-          }
         }
       }
 
