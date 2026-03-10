@@ -16,14 +16,17 @@
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-y: auto !important;
+  height: auto !important;
+}
+
 body {
   margin: 0;
   padding: 0;
   font-family: var(--font-ui);
   color: #e8d5a3;
   background: var(--bg-deep);
-  overflow: hidden;
-  height: 100vh;
   width: 100vw;
 }
 
@@ -64,19 +67,22 @@ body {
   position: relative;
   z-index: 10;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: flex-start;
   align-items: center;
   min-height: 100vh;
-  padding: 20px;
+  padding: 16px 8px;
+  overflow-y: auto;
 }
 
 /* UI Container */
 .game-container {
-  width: 420px;
+  width: 100%;
+  max-width: 600px;
   background: var(--ui-bg);
   border: 1px solid rgba(201, 168, 76, 0.3);
   border-radius: 6px;
-  padding: 44px 38px 40px;
+  padding: 20px;
   backdrop-filter: blur(14px);
   box-shadow: 
     0 0 0 1px rgba(192, 0, 26, 0.12),
@@ -450,10 +456,10 @@ input[type="text"]:focus {
 .number-grid {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  gap: 6px;
+  gap: 5px;
   width: 100%;
   padding: 8px;
-  margin-bottom: 24px;
+  margin: 12px 0;
 }
 
 .grid-cell {
@@ -466,10 +472,11 @@ input[type="text"]:focus {
   border-radius: 4px;
   color: #e8d5a3;
   font-family: 'Rajdhani', sans-serif;
-  font-size: 13px;
+  font-size: clamp(10px, 1.5vw, 14px);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  min-width: 0;
 }
 
 .grid-cell:hover {
@@ -491,3 +498,8 @@ input[type="text"]:focus {
   pointer-events: none;
 }
 
+@media (min-height: 700px) and (min-width: 768px) {
+  .App {
+    justify-content: center;
+  }
+}
