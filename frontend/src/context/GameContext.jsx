@@ -74,6 +74,12 @@ export const GameProvider = ({ children }) => {
         }
       });
 
+      socketInstance.on('joined', (data) => {
+        setRoomCode(data.roomId);
+        // Store token for authenticated events
+        socketInstance.handshake.auth = { token: data.token };
+      });
+
       // Listeners for Backend Events
       socketInstance.on('room_update', (data) => {
         setPlayers(data.players);

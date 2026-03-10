@@ -141,10 +141,13 @@ const Lobby = () => {
   const isHost = players.find(p => p.name === playerName)?.isHost;
 
   const copyCode = () => {
+    if (!roomCode || roomCode === 'CREATE') return;
     navigator.clipboard.writeText(roomCode);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 1500);
   };
+
+  const displayCode = (!roomCode || roomCode === 'CREATE') ? '...' : roomCode;
 
   return (
     <motion.div 
@@ -153,11 +156,36 @@ const Lobby = () => {
     >
       <div className="room-code-section">
         <label className="room-code-label">Game Lobby</label>
-        <div className="room-code-display">
-          <div className="room-code-box">{roomCode}</div>
+        <div className="room-code-display" style={{position: 'relative'}}>
+          <div className="room-code-box">{displayCode}</div>
           <button className="copy-button" onClick={copyCode} title="Copy Code">
             {copied ? <Check size={18} /> : <Copy size={18} />}
           </button>
+          
+          <AnimatePresence>
+            {copied && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                style={{
+                  position: 'absolute',
+                  right: '-10px',
+                  top: '-30px',
+                  background: 'var(--gold)',
+                  color: '#000',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  fontFamily: 'var(--font-ui)',
+                  pointerEvents: 'none'
+                }}
+              >
+                Copied!
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
