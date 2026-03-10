@@ -161,7 +161,11 @@ export const GameProvider = ({ children }) => {
    * startGame: Sends signal to backend to start the game match.
    */
   const startGame = () => {
-    if (socket) socket.emit('start_game', { roomId: roomCode });
+    console.log('Start game clicked, roomId:', roomCode, 'socket connected:', socket?.connected);
+    if (socket) {
+      console.log('Emitting start_game with roomId:', roomCode);
+      socket.emit('start_game', { roomId: roomCode });
+    }
   };
 
   /**

@@ -275,30 +275,51 @@ io.on("connection", (socket) => {
    * Initiates the game session (Only for Hosts).
    */
   socket.on("start_game", (data) => {
-    verifySocketToken(socket, data, () => {
-      const room = rooms[socket.roomCode];
-      if (!room) return;
+    console.log('start_game received from:', socket.id, 'data:', data);
+    const { roomId } = data;
 
-      const player = room.players[socket.id];
-      
-      // Check if the current socket is actually the host
-      if (!player || !player.isHost) {
-        return socket.emit('error', { message: 'Only host can start game' });
-      }
+    // Manual JWT check for debugging as requested
+    const token = socket.handshake.auth.token;
+    if (!token) {
+      console.log('No token on start_game from:', socket.id);
+      socket.emit('error', { message: 'Auth required' });
+      return;
+    }
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      socket.user = decoded;
+    } catch(err) {
+      console.log('JWT verify failed:', err.message);
+      socket.emit('error', { message: 'Invalid token' });
+      return;
+    }
 
-      const activePlayers = Object.values(room.players).filter(
-        (p) => !p.isEliminated,
-      );
-      // Game requires minimum 3 players for balance
-      if (activePlayers.length < 3) {
-        return socket.emit("error", { message: "Minimum 3 players required to start." });
-      }
+    const room = rooms[roomId || socket.roomCode];
+    // Host check log - using Object.values since room.players is an object
+    console.log('Room:', room?.code, 'Host check:', 
+      Object.values(room?.players || {}).find(p => p.id === socket.id)?.isHost);
 
-      room.isLocked = true; // Lock room to prevent new joins
-      room.lastActivity = Date.now();
-      io.to(room.code).emit("game_started");
-      startNewRound(room.code);
-    });
+    if (!room) return;
+
+    const player = room.players[socket.id];
+    
+    // Check if the current socket is actually the host
+    if (!player || !player.isHost) {
+      return socket.emit('error', { message: 'Only host can start game' });
+    }
+
+    const activePlayers = Object.values(room.players).filter(
+      (p) => !p.isEliminated,
+    );
+    // Game requires minimum 3 players for balance
+    if (activePlayers.length < 3) {
+      return socket.emit("error", { message: "Minimum 3 players required to start." });
+    }
+
+    room.isLocked = true; // Lock room to prevent new joins
+    room.lastActivity = Date.now();
+    io.to(room.code).emit("game_started");
+    startNewRound(room.code);
   });
 
   /**
